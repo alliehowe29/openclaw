@@ -31,6 +31,22 @@ RUN pnpm ui:build
 
 ENV NODE_ENV=production
 
+# Set up pnpm global bin directory for node user
+ENV PNPM_HOME="/home/node/.local/share/pnpm"
+ENV PATH="${PNPM_HOME}:${PATH}"
+RUN mkdir -p /home/node/.local/share/pnpm && \
+    chown -R node:node /home/node/.local
+
+# Pre-install mcporter globally for the node user
+RUN pnpm add -g mcporter
+
+# Create config directory for ECS deployment
+# trustedProxies includes VPC CIDR to trust ALB proxy headers
+# controlUi.dangerouslyDisableDeviceAuth skips device pairing for Control UI (replace with Tailscale later)
+RUN mkdir -p /home/node/.openclaw && \
+    echo '{"gateway":{"mode":"local","trustedProxies":["10.2.0.0/16"],"controlUi":{"dangerouslyDisableDeviceAuth":true}},"browser":{"enabled":true,"defaultProfile":"browserbase","profiles":{"browserbase":{"cdpUrl":"wss://connect.browserbase.com?apiKey=${BROWSERBASE_API_KEY}&projectId=${BROWSERBASE_PROJECT_ID}","color":"#00AA00"}}}}' > /home/node/.openclaw/openclaw.json && \
+    chown -R node:node /home/node/.openclaw
+
 # Security hardening: Run as non-root user
 # The node:22-bookworm image includes a 'node' user (uid 1000)
 # This reduces the attack surface by preventing container escape via root privileges
