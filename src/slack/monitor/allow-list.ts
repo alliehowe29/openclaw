@@ -1,19 +1,20 @@
 import type { AllowlistMatch } from "../../channels/allowlist-match.js";
+import {
+  normalizeHyphenSlug,
+  normalizeStringEntries,
+  normalizeStringEntriesLower,
+} from "../../shared/string-normalization.js";
 
 export function normalizeSlackSlug(raw?: string) {
-  const trimmed = raw?.trim().toLowerCase() ?? "";
-  if (!trimmed) return "";
-  const dashed = trimmed.replace(/\s+/g, "-");
-  const cleaned = dashed.replace(/[^a-z0-9#@._+-]+/g, "-");
-  return cleaned.replace(/-{2,}/g, "-").replace(/^[-.]+|[-.]+$/g, "");
+  return normalizeHyphenSlug(raw);
 }
 
 export function normalizeAllowList(list?: Array<string | number>) {
-  return (list ?? []).map((entry) => String(entry).trim()).filter(Boolean);
+  return normalizeStringEntries(list);
 }
 
 export function normalizeAllowListLower(list?: Array<string | number>) {
-  return normalizeAllowList(list).map((entry) => entry.toLowerCase());
+  return normalizeStringEntriesLower(list);
 }
 
 export type SlackAllowListMatch = AllowlistMatch<
@@ -24,9 +25,12 @@ export function resolveSlackAllowListMatch(params: {
   allowList: string[];
   id?: string;
   name?: string;
+  allowNameMatching?: boolean;
 }): SlackAllowListMatch {
   const allowList = params.allowList;
-  if (allowList.length === 0) return { allowed: false };
+  if (allowList.length === 0) {
+    return { allowed: false };
+  }
   if (allowList.includes("*")) {
     return { allowed: true, matchKey: "*", matchSource: "wildcard" };
   }
@@ -37,12 +41,18 @@ export function resolveSlackAllowListMatch(params: {
     { value: id, source: "id" },
     { value: id ? `slack:${id}` : undefined, source: "prefixed-id" },
     { value: id ? `user:${id}` : undefined, source: "prefixed-user" },
-    { value: name, source: "name" },
-    { value: name ? `slack:${name}` : undefined, source: "prefixed-name" },
-    { value: slug, source: "slug" },
+    ...(params.allowNameMatching === true
+      ? ([
+          { value: name, source: "name" as const },
+          { value: name ? `slack:${name}` : undefined, source: "prefixed-name" as const },
+          { value: slug, source: "slug" as const },
+        ] satisfies Array<{ value?: string; source: SlackAllowListMatch["matchSource"] }>)
+      : []),
   ];
   for (const candidate of candidates) {
-    if (!candidate.value) continue;
+    if (!candidate.value) {
+      continue;
+    }
     if (allowList.includes(candidate.value)) {
       return {
         allowed: true,
@@ -54,7 +64,12 @@ export function resolveSlackAllowListMatch(params: {
   return { allowed: false };
 }
 
-export function allowListMatches(params: { allowList: string[]; id?: string; name?: string }) {
+export function allowListMatches(params: {
+  allowList: string[];
+  id?: string;
+  name?: string;
+  allowNameMatching?: boolean;
+}) {
   return resolveSlackAllowListMatch(params).allowed;
 }
 
@@ -62,12 +77,16 @@ export function resolveSlackUserAllowed(params: {
   allowList?: Array<string | number>;
   userId?: string;
   userName?: string;
+  allowNameMatching?: boolean;
 }) {
   const allowList = normalizeAllowListLower(params.allowList);
-  if (allowList.length === 0) return true;
+  if (allowList.length === 0) {
+    return true;
+  }
   return allowListMatches({
     allowList,
     id: params.userId,
     name: params.userName,
+    allowNameMatching: params.allowNameMatching,
   });
 }

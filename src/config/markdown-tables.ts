@@ -1,4 +1,5 @@
 import { normalizeChannelId } from "../channels/plugins/index.js";
+import { resolveAccountEntry } from "../routing/account-lookup.js";
 import { normalizeAccountId } from "../routing/session-key.js";
 import type { OpenClawConfig } from "./config.js";
 import type { MarkdownTableMode } from "./types.base.js";
@@ -25,19 +26,17 @@ function resolveMarkdownModeFromSection(
   section: MarkdownConfigSection | undefined,
   accountId?: string | null,
 ): MarkdownTableMode | undefined {
-  if (!section) return undefined;
+  if (!section) {
+    return undefined;
+  }
   const normalizedAccountId = normalizeAccountId(accountId);
   const accounts = section.accounts;
   if (accounts && typeof accounts === "object") {
-    const direct = accounts[normalizedAccountId];
-    const directMode = direct?.markdown?.tables;
-    if (isMarkdownTableMode(directMode)) return directMode;
-    const matchKey = Object.keys(accounts).find(
-      (key) => key.toLowerCase() === normalizedAccountId.toLowerCase(),
-    );
-    const match = matchKey ? accounts[matchKey] : undefined;
+    const match = resolveAccountEntry(accounts, normalizedAccountId);
     const matchMode = match?.markdown?.tables;
-    if (isMarkdownTableMode(matchMode)) return matchMode;
+    if (isMarkdownTableMode(matchMode)) {
+      return matchMode;
+    }
   }
   const sectionMode = section.markdown?.tables;
   return isMarkdownTableMode(sectionMode) ? sectionMode : undefined;
@@ -50,7 +49,9 @@ export function resolveMarkdownTableMode(params: {
 }): MarkdownTableMode {
   const channel = normalizeChannelId(params.channel);
   const defaultMode = channel ? (DEFAULT_TABLE_MODES.get(channel) ?? "code") : "code";
-  if (!channel || !params.cfg) return defaultMode;
+  if (!channel || !params.cfg) {
+    return defaultMode;
+  }
   const channelsConfig = params.cfg.channels as Record<string, unknown> | undefined;
   const section = (channelsConfig?.[channel] ??
     (params.cfg as Record<string, unknown> | undefined)?.[channel]) as
